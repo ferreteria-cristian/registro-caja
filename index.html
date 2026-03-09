@@ -275,6 +275,32 @@
 
   .vend-val{font-family:var(--mono);font-size:12px;color:var(--muted);flex-shrink:0;width:90px;text-align:right}
 
+
+  /* EDIT MODAL */
+  .edit-overlay{position:fixed;inset:0;background:rgba(15,22,38,.65);display:none;
+    align-items:flex-end;justify-content:center;z-index:1100;backdrop-filter:blur(2px)}
+  .edit-overlay.open{display:flex}
+  .edit-sheet{background:var(--white);border-radius:18px 18px 0 0;padding:20px;
+    width:100%;max-width:520px;box-shadow:0 -8px 40px rgba(0,0,0,.2);
+    max-height:85vh;overflow-y:auto}
+  .edit-sheet h3{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;
+    color:var(--navy);margin-bottom:4px}
+  .edit-sheet .edit-sub{font-size:12px;color:var(--muted);margin-bottom:16px}
+  .edit-field{margin-bottom:12px}
+  .edit-field label{display:block;font-size:10px;font-weight:700;letter-spacing:.09em;
+    text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+  .edit-field input,.edit-field select{width:100%;padding:11px 13px;border:1.5px solid var(--border);
+    border-radius:8px;font-family:var(--sans);font-size:15px;color:var(--text);
+    background:var(--cream);outline:none;-webkit-appearance:none}
+  .edit-field input:focus,.edit-field select:focus{border-color:var(--navy);background:#fff}
+  .edit-actions{display:flex;gap:10px;margin-top:16px}
+  .btn-edit-save{flex:1;padding:13px;background:var(--navy);color:#fff;border:none;
+    border-radius:10px;font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;touch-action:manipulation}
+  .btn-edit-cancel{padding:13px 18px;background:transparent;color:var(--muted);border:1.5px solid var(--border);
+    border-radius:10px;font-family:var(--sans);font-size:14px;font-weight:600;cursor:pointer;touch-action:manipulation}
+  .tx-card .edit-icon{font-size:13px;opacity:.4;margin-left:6px;cursor:pointer}
+  .tx-card:hover .edit-icon{opacity:.8}
+
   @media(max-width:480px){
     .resumen-grid{grid-template-columns:1fr}
     .resumen-card.total-caja{grid-column:1}
@@ -303,7 +329,8 @@
   </button>
 </header>
 <div class="tabs">
-  <div class="tab active">📝 Registrar</div>
+  <div class="tab active" id="tab-btn-registrar" onclick="setTab('registrar')">📝 Registrar</div>
+  <div class="tab" id="tab-btn-mis" onclick="setTab('mis')">🕐 Mis registros</div>
 </div>
 <div id="tab-registrar">
 <main>
@@ -347,6 +374,16 @@
   </div>
 </main>
 </div>
+
+<div id="tab-mis" style="display:none">
+<main>
+  <div style="padding:10px 0 14px;font-size:11px;color:var(--muted);text-align:center" id="mis-hint">
+    Toca ✎ editar para corregir un registro
+  </div>
+  <div id="lista-mis"></div>
+</main>
+</div>
+
 <div id="tab-movimientos" style="display:none!important">
 <main>
   <div class="filters">
@@ -409,12 +446,14 @@ function cargarDesdeSheets() {
   fetch(SCRIPT_URL + '?action=getAll&sheet=RegistroCaja')
     .then(function(r) { return r.json(); })
     .then(function(data) {
-      if (data && data.records) {
-        transacciones = data.records.map(function(r) {
+      if (data && data.ok && data.data && data.data.length > 1) {
+        // data.data[0] = headers, data.data[1..] = rows
+        // Columns: id, fecha, hora, tipo, pago, vendedor, descripcion, total
+        transacciones = data.data.slice(1).map(function(r) {
           return {
-            id: r.id, fecha: r.fecha, hora: r.hora,
-            tipo: r.tipo, pago: r.pago, vendedor: r.vendedor,
-            descripcion: r.descripcion, total: parseFloat(r.total) || 0
+            id: String(r[0]), fecha: r[1], hora: r[2],
+            tipo: r[3], pago: r[4], vendedor: r[5],
+            descripcion: r[6], total: parseFloat(r[7]) || 0
           };
         }).reverse();
         localStorage.setItem('fc_tx', JSON.stringify(transacciones));
@@ -437,7 +476,60 @@ function mostrarCargando(show) {
 }
 
 function setTab(tab) {
-  // Only registrar tab available in main app
+  ['registrar','mis'].forEach(function(t) {
+    var el = document.getElementById('tab-' + t);
+    if (el) el.style.display = t === tab ? '' : 'none';
+  });
+  document.getElementById('tab-btn-registrar').classList.toggle('active', tab === 'registrar');
+  document.getElementById('tab-btn-mis').classList.toggle('active', tab === 'mis');
+  if (tab === 'mis') renderMisRegistros();
+}
+
+function renderMisRegistros() {
+  var c = document.getElementById('lista-mis');
+  var hint = document.getElementById('mis-hint');
+  var txs = vendedorActual
+    ? transacciones.filter(function(t) { return t.vendedor === vendedorActual; })
+    : transacciones.slice();
+  if (vendedorActual) {
+    hint.textContent = 'Registros de ' + vendedorActual + ' — toca ✎ editar para corregir';
+  } else {
+    hint.textContent = 'Selecciona un vendedor para ver solo sus registros';
+  }
+  if (!txs.length) {
+    c.innerHTML = '<div class="empty"><div class="icon">🕐</div><p>Sin registros aún</p></div>';
+    return;
+  }
+  c.innerHTML = txs.map(function(t) {
+    var itemsHtml = '';
+    if (t.items) {
+      itemsHtml = '<div class="tx-items">' + t.items.map(function(i) {
+        return '<div class="tx-item-line"><span>' + (i.cantidad !== 1 ? i.cantidad + '× ' : '') + escHtml(i.nombre) + '</span><span>' + formatPeso(i.cantidad * i.valor) + '</span></div>';
+      }).join('') + '</div>';
+    }
+    return '<div class="tx-card" id="txm-' + t.id + '">' +
+      '<div class="tx-top" onclick="toggleTxM(' + t.id + ')">' +
+        '<div class="tx-left">' +
+          '<div class="tx-meta">' +
+            '<span class="badge ' + t.tipo + '">' + (t.tipo === 'venta' ? 'Venta' : 'Abono') + '</span>' +
+            '<span class="badge ' + t.pago + '">' + (t.pago === 'efectivo' ? '💵' : '📲') + '</span>' +
+            '<span class="tx-time">' + t.hora + '</span>' +
+          '</div>' +
+          '<div class="tx-desc">' + escHtml(t.descripcion) + '</div>' +
+        '</div>' +
+        '<div class="tx-right">' +
+          '<div class="tx-total ' + t.tipo + '">' + formatPeso(t.total) + '</div>' +
+          '<div style="text-align:right;margin-top:4px">' +
+            '<button style="font-size:11px;padding:3px 10px;border:1px solid var(--border);border-radius:6px;background:var(--cream);cursor:pointer;font-family:var(--sans);font-weight:600;color:var(--navy);touch-action:manipulation" onclick="event.stopPropagation();abrirEdit(' + t.id + ')">✎ editar</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>' + itemsHtml + '</div>';
+  }).join('');
+}
+
+function toggleTxM(id) {
+  var el = document.getElementById('txm-' + id);
+  if (el) el.classList.toggle('expanded');
 }
 
 function setTipo(tipo) {
@@ -836,6 +928,7 @@ function renderMovimientos() {
             '<span class="badge ' + t.pago + '">' + (t.pago === 'efectivo' ? '💵 Efectivo' : '📲 Transfer.') + '</span>' +
             '<span class="tx-time">' + t.hora + '</span>' +
             '<span class="tx-vendedor">· ' + t.vendedor + '</span>' +
+            ((!vendedorActual || vendedorActual === t.vendedor) ? '<span class="edit-icon" onclick="event.stopPropagation();abrirEdit(' + t.id + ')">✎ editar</span>' : '') +
           '</div>' +
           '<div class="tx-desc">' + escHtml(t.descripcion) + '</div>' +
         '</div>' +
@@ -921,21 +1014,22 @@ function guardar(tx) {
     tipo: tx.tipo, pago: tx.pago, vendedor: tx.vendedor,
     descripcion: tx.descripcion, total: tx.total
   };
+  // Script expects an array in params.row
+  var rowArray = [
+    tx.id, tx.fecha, tx.hora, tx.tipo,
+    tx.pago, tx.vendedor, tx.descripcion, tx.total
+  ];
   var params = new URLSearchParams();
   params.append('action', 'append');
   params.append('sheet', 'RegistroCaja');
-  params.append('data', JSON.stringify(row));
+  params.append('row', JSON.stringify(rowArray));
   fetch(SCRIPT_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: params.toString()
   }).then(function(r) { return r.json(); })
   .then(function(res) {
-    if (res && res.result === 'success') {
-      // OK
-    } else {
-      toast('⚠ Error al guardar en Sheets');
-    }
+    if (!res.ok) toast('⚠ Error Sheets: ' + (res.error || ''));
   })
   .catch(function() {
     toast('⚠ Sin conexión — guardado solo local');
@@ -1225,6 +1319,68 @@ function confirmarBorrar() {
   }
 }
 
+// ── EDITAR REGISTRO ────────────────────────────────────────────
+var editId = null;
+
+function abrirEdit(id) {
+  var tx = transacciones.find(function(t) { return String(t.id) === String(id); });
+  if (!tx) return;
+  // Only allow editing own records (match current vendedor) OR if no vendedor selected yet
+  if (vendedorActual && tx.vendedor !== vendedorActual) {
+    toast('Solo puedes editar tus propios registros');
+    return;
+  }
+  editId = id;
+  document.getElementById('edit-sub').textContent = tx.tipo.toUpperCase() + ' · ' + tx.hora + ' · ' + tx.vendedor;
+  document.getElementById('edit-desc').value = tx.descripcion;
+  document.getElementById('edit-total').value = tx.total;
+  document.getElementById('edit-pago').value = tx.pago;
+  document.getElementById('edit-overlay').classList.add('open');
+}
+
+function cerrarEdit() {
+  editId = null;
+  document.getElementById('edit-overlay').classList.remove('open');
+}
+
+function guardarEdit() {
+  if (!editId) return;
+  var tx = transacciones.find(function(t) { return String(t.id) === String(editId); });
+  if (!tx) return;
+  var desc = document.getElementById('edit-desc').value.trim();
+  var total = parseFloat(document.getElementById('edit-total').value);
+  var pago = document.getElementById('edit-pago').value;
+  if (!desc) { toast('La descripción no puede estar vacía'); return; }
+  if (!total || total <= 0) { toast('El total debe ser mayor a 0'); return; }
+  tx.descripcion = desc;
+  tx.total = total;
+  tx.pago = pago;
+  localStorage.setItem('fc_tx', JSON.stringify(transacciones));
+  // Update in Sheets via updateById
+  var rowArray = [tx.id, tx.fecha, tx.hora, tx.tipo, tx.pago, tx.vendedor, tx.descripcion, tx.total];
+  var params = new URLSearchParams();
+  params.append('action', 'updateById');
+  params.append('sheet', 'RegistroCaja');
+  params.append('id', String(tx.id));
+  params.append('values', JSON.stringify(rowArray));
+  fetch(SCRIPT_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: params.toString()
+  }).then(function(r) { return r.json(); })
+  .then(function(res) {
+    if (!res.ok) toast('⚠ Error al actualizar: ' + (res.error || ''));
+    else toast('✓ Registro actualizado');
+  })
+  .catch(function() { toast('⚠ Sin conexión — guardado solo local'); });
+  cerrarEdit();
+  // Re-render movimientos if visible
+  var admContent = document.getElementById('adm-content');
+  if (admContent && admContent.style.display !== 'none' && admTab === 'movimientos') {
+    renderAdmMovimientos();
+  }
+}
+
 init();
 </script>
 
@@ -1250,6 +1406,33 @@ init();
       <button class="adm-login-btn" onclick="verificarAdmin()">Ingresar</button>
     </div>
     <div id="adm-content" style="display:none"></div>
+  </div>
+</div>
+
+
+<div class="edit-overlay" id="edit-overlay">
+  <div class="edit-sheet">
+    <h3>Editar registro</h3>
+    <p class="edit-sub" id="edit-sub"></p>
+    <div class="edit-field">
+      <label>Descripción</label>
+      <input type="text" id="edit-desc" autocorrect="off" autocapitalize="off" spellcheck="false">
+    </div>
+    <div class="edit-field">
+      <label>Total</label>
+      <input type="number" id="edit-total" inputmode="numeric">
+    </div>
+    <div class="edit-field">
+      <label>Forma de pago</label>
+      <select id="edit-pago">
+        <option value="efectivo">💵 Efectivo</option>
+        <option value="transferencia">📲 Transferencia</option>
+      </select>
+    </div>
+    <div class="edit-actions">
+      <button class="btn-edit-cancel" onclick="cerrarEdit()">Cancelar</button>
+      <button class="btn-edit-save" onclick="guardarEdit()">Guardar cambios</button>
+    </div>
   </div>
 </div>
 
