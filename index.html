@@ -1009,31 +1009,27 @@ function cerrarModalVendedor() {
 function guardar(tx) {
   localStorage.setItem('fc_tx', JSON.stringify(transacciones));
   if (!tx) return;
-  var row = {
-    id: tx.id, fecha: tx.fecha, hora: tx.hora,
-    tipo: tx.tipo, pago: tx.pago, vendedor: tx.vendedor,
-    descripcion: tx.descripcion, total: tx.total
-  };
-  // Script expects an array in params.row
   var rowArray = [
     tx.id, tx.fecha, tx.hora, tx.tipo,
     tx.pago, tx.vendedor, tx.descripcion, tx.total
   ];
-  var params = new URLSearchParams();
-  params.append('action', 'append');
-  params.append('sheet', 'RegistroCaja');
-  params.append('row', JSON.stringify(rowArray));
-  fetch(SCRIPT_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: params.toString()
-  }).then(function(r) { return r.json(); })
-  .then(function(res) {
-    if (!res.ok) toast('⚠ Error Sheets: ' + (res.error || ''));
-  })
-  .catch(function() {
-    toast('⚠ Sin conexión — guardado solo local');
-  });
+  // Send as GET params — most reliable with Apps Script
+  var url = SCRIPT_URL
+    + '?action=append'
+    + '&sheet=RegistroCaja'
+    + '&row=' + encodeURIComponent(JSON.stringify(rowArray));
+  fetch(url)
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      if (res.ok) {
+        toast('✓ Guardado en Sheets');
+      } else {
+        toast('⚠ Error: ' + (res.error || 'sin respuesta'));
+      }
+    })
+    .catch(function(err) {
+      toast('⚠ Sin conexión — solo local');
+    });
 }
 function formatPeso(n) { return '$' + Math.round(n).toLocaleString('es-CO'); }
 var toastTimer;
@@ -1358,21 +1354,18 @@ function guardarEdit() {
   localStorage.setItem('fc_tx', JSON.stringify(transacciones));
   // Update in Sheets via updateById
   var rowArray = [tx.id, tx.fecha, tx.hora, tx.tipo, tx.pago, tx.vendedor, tx.descripcion, tx.total];
-  var params = new URLSearchParams();
-  params.append('action', 'updateById');
-  params.append('sheet', 'RegistroCaja');
-  params.append('id', String(tx.id));
-  params.append('values', JSON.stringify(rowArray));
-  fetch(SCRIPT_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: params.toString()
-  }).then(function(r) { return r.json(); })
-  .then(function(res) {
-    if (!res.ok) toast('⚠ Error al actualizar: ' + (res.error || ''));
-    else toast('✓ Registro actualizado');
-  })
-  .catch(function() { toast('⚠ Sin conexión — guardado solo local'); });
+  var url = SCRIPT_URL
+    + '?action=updateById'
+    + '&sheet=RegistroCaja'
+    + '&id=' + encodeURIComponent(String(tx.id))
+    + '&values=' + encodeURIComponent(JSON.stringify(rowArray));
+  fetch(url)
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      if (!res.ok) toast('⚠ Error al actualizar: ' + (res.error || ''));
+      else toast('✓ Registro actualizado');
+    })
+    .catch(function() { toast('⚠ Sin conexión — guardado solo local'); });
   cerrarEdit();
   // Re-render movimientos if visible
   var admContent = document.getElementById('adm-content');
