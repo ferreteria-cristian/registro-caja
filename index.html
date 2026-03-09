@@ -532,10 +532,11 @@ function renderItemsForm() {
     var cantInp = document.createElement('input');
     cantInp.type = 'number';
     cantInp.placeholder = '1';
-    cantInp.value = item.cantidad;
+    cantInp.value = item.cantidad || 1;
     cantInp.min = '0.01';
     cantInp.step = 'any';
     cantInp.setAttribute('inputmode', 'decimal');
+    cantInp.addEventListener('focus', function() { this.select(); });
     cantInp.addEventListener('input', function() { actualizarItemCant(item.id, this.value); });
 
     var valInp = document.createElement('input');
@@ -544,7 +545,15 @@ function renderItemsForm() {
     valInp.placeholder = '0';
     valInp.setAttribute('inputmode', 'numeric');
     if (item.valor) valInp.value = item.valor;
+    valInp.addEventListener('focus', function() { this.select(); });
     valInp.addEventListener('input', function() { actualizarItemValor(item.id, this.value); });
+    valInp.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        actualizarItemValor(item.id, this.value);
+        agregarItem();
+      }
+    });
 
     var delBtn = document.createElement('button');
     delBtn.className = 'btn-del-item';
@@ -665,10 +674,25 @@ function elegir(id, nombre, precio) {
       swrap.replaceWith(tag);
     }
     var vi = row.querySelector('.price');
-    if (vi) {
-      vi.value = precio || '';
-      vi.focus();
-      vi.select();
+    if (vi) vi.value = '';
+    // Focus cantidad first for fast entry
+    var cantInput = row.querySelector('input[type="number"]:not(.price)');
+    if (cantInput) {
+      cantInput.value = '';
+      cantInput.focus();
+      cantInput.select();
+      // On iOS, when user changes cantidad or taps next, jump to precio
+      cantInput.addEventListener('change', function() {
+        var priceInput = row.querySelector('.price');
+        if (priceInput) { priceInput.focus(); priceInput.select(); }
+      });
+      cantInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' || e.key === 'Tab') {
+          e.preventDefault();
+          var priceInput = row.querySelector('.price');
+          if (priceInput) { priceInput.focus(); priceInput.select(); }
+        }
+      });
     }
   }
   var ac = document.getElementById('ac-' + id);
@@ -886,10 +910,23 @@ function guardar(tx) {
     tipo: tx.tipo, pago: tx.pago, vendedor: tx.vendedor,
     descripcion: tx.descripcion, total: tx.total
   };
+  var params = new URLSearchParams();
+  params.append('action', 'append');
+  params.append('sheet', 'RegistroCaja');
+  params.append('data', JSON.stringify(row));
   fetch(SCRIPT_URL, {
     method: 'POST',
-    body: JSON.stringify({ action: 'append', sheet: 'RegistroCaja', data: row })
-  }).catch(function() {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: params.toString()
+  }).then(function(r) { return r.json(); })
+  .then(function(res) {
+    if (res && res.result === 'success') {
+      // OK
+    } else {
+      toast('⚠ Error al guardar en Sheets');
+    }
+  })
+  .catch(function() {
     toast('⚠ Sin conexión — guardado solo local');
   });
 }
