@@ -536,14 +536,23 @@ function renderItemsForm() {
     cantInp.min = '0.01';
     cantInp.step = 'any';
     cantInp.setAttribute('inputmode', 'decimal');
+    cantInp.setAttribute('tabindex', '2');
     cantInp.addEventListener('focus', function() { this.select(); });
     cantInp.addEventListener('input', function() { actualizarItemCant(item.id, this.value); });
+    cantInp.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        valInp.focus();
+        valInp.select();
+      }
+    });
 
     var valInp = document.createElement('input');
     valInp.type = 'number';
     valInp.className = 'price';
     valInp.placeholder = '0';
     valInp.setAttribute('inputmode', 'numeric');
+    valInp.setAttribute('tabindex', '3');
     if (item.valor) valInp.value = item.valor;
     valInp.addEventListener('focus', function() { this.select(); });
     valInp.addEventListener('input', function() { actualizarItemValor(item.id, this.value); });
@@ -675,25 +684,14 @@ function elegir(id, nombre, precio) {
     }
     var vi = row.querySelector('.price');
     if (vi) vi.value = '';
-    // Focus cantidad first for fast entry
-    var cantInput = row.querySelector('input[type="number"]:not(.price)');
-    if (cantInput) {
-      cantInput.value = '';
-      cantInput.focus();
-      cantInput.select();
-      // On iOS, when user changes cantidad or taps next, jump to precio
-      cantInput.addEventListener('change', function() {
-        var priceInput = row.querySelector('.price');
-        if (priceInput) { priceInput.focus(); priceInput.select(); }
-      });
-      cantInput.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter' || e.key === 'Tab') {
-          e.preventDefault();
-          var priceInput = row.querySelector('.price');
-          if (priceInput) { priceInput.focus(); priceInput.select(); }
-        }
-      });
-    }
+    // Focus cantidad after a beat (iOS needs time after DOM change)
+    setTimeout(function() {
+      var cantInput = row.querySelector('input[inputmode="decimal"]');
+      if (cantInput) {
+        cantInput.focus();
+        cantInput.select();
+      }
+    }, 80);
   }
   var ac = document.getElementById('ac-' + id);
   if (ac) ac.classList.remove('open');
