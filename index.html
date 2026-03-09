@@ -61,14 +61,18 @@
     transition:border-color .15s,background .15s;outline:none;-webkit-appearance:none}
   .field input:focus{border-color:var(--navy);background:#fff}
   .items-list{margin-bottom:10px}
-  .item-row{display:grid;grid-template-columns:1fr 58px 84px 34px;gap:5px;margin-bottom:5px;align-items:start}
-  .item-row-header{display:grid;grid-template-columns:1fr 58px 84px 34px;gap:5px;margin-bottom:5px}
+  .item-row{display:grid;grid-template-columns:1fr 58px 84px 72px 34px;gap:5px;margin-bottom:5px;align-items:start}
+  .item-row-header{display:grid;grid-template-columns:1fr 58px 84px 72px 34px;gap:5px;margin-bottom:5px}
   .item-row-header span{font-size:9px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);padding-left:3px}
   .item-row input{padding:9px 10px;border:1.5px solid var(--border);border-radius:7px;
     font-family:var(--sans);font-size:13px;color:var(--text);background:var(--cream);
     outline:none;width:100%;transition:border-color .15s,background .15s}
   .item-row input:focus{border-color:var(--navy);background:#fff}
   .item-row input.price{font-family:var(--mono);font-size:13px}
+  .item-subtotal{display:flex;align-items:center;justify-content:flex-end;
+    padding:9px 6px;font-family:var(--mono);font-size:12px;font-weight:600;
+    color:var(--navy);opacity:.7;white-space:nowrap;line-height:1.2;text-align:right}
+  .item-subtotal.has-value{opacity:1;color:var(--orange)}
   .btn-del-item{width:34px;height:34px;border:1.5px solid var(--border);border-radius:7px;
     background:transparent;cursor:pointer;font-size:17px;color:var(--muted);
     display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s;margin-top:0}
@@ -304,7 +308,7 @@
   @media(max-width:480px){
     .resumen-grid{grid-template-columns:1fr}
     .resumen-card.total-caja{grid-column:1}
-    .item-row{grid-template-columns:1fr 50px 75px 32px}
+    .item-row{grid-template-columns:1fr 50px 75px 60px 32px}
   }
 </style>
 </head>
@@ -347,7 +351,7 @@
     </div>
     <div id="seccion-items">
       <div class="item-row-header">
-        <span>Ítem — toca ✎ para editar</span><span>Cant.</span><span>Valor</span><span></span>
+        <span>Ítem — toca ✎ para editar</span><span>Cant.</span><span>Valor</span><span style="text-align:right">Subtotal</span><span></span>
       </div>
       <div class="items-list" id="items-container"></div>
       <button class="btn-add-item" onclick="agregarItem()">+ Agregar ítem</button>
@@ -580,6 +584,15 @@ function actualizarItemValor(id, val) {
   actualizarTotal();
 }
 
+function actualizarSubtotalItem(id) {
+  var item = itemsForm.find(function(i) { return i.id === id; });
+  var el = document.getElementById('sub-' + id);
+  if (!item || !el) return;
+  var val = (parseFloat(item.cantidad) || 1) * (parseFloat(item.valor) || 0);
+  el.textContent = val > 0 ? formatPeso(val) : '';
+  el.classList.toggle('has-value', val > 0);
+}
+
 function calcularTotal() {
   return itemsForm.reduce(function(s, i) {
     return s + (parseFloat(i.cantidad) || 1) * (parseFloat(i.valor) || 0);
@@ -641,7 +654,10 @@ function renderItemsForm() {
     cantInp.setAttribute('inputmode', 'decimal');
     cantInp.setAttribute('tabindex', '2');
     cantInp.addEventListener('focus', function() { this.select(); });
-    cantInp.addEventListener('input', function() { actualizarItemCant(item.id, this.value); });
+    cantInp.addEventListener('input', function() {
+      actualizarItemCant(item.id, this.value);
+      actualizarSubtotalItem(item.id);
+    });
     cantInp.addEventListener('keydown', function(e) {
       if (e.key === 'Enter' || e.key === 'Tab') {
         e.preventDefault();
@@ -658,7 +674,10 @@ function renderItemsForm() {
     valInp.setAttribute('tabindex', '3');
     if (item.valor) valInp.value = item.valor;
     valInp.addEventListener('focus', function() { this.select(); });
-    valInp.addEventListener('input', function() { actualizarItemValor(item.id, this.value); });
+    valInp.addEventListener('input', function() {
+      actualizarItemValor(item.id, this.value);
+      actualizarSubtotalItem(item.id);
+    });
     valInp.addEventListener('keydown', function(e) {
       if (e.key === 'Enter') {
         e.preventDefault();
@@ -672,9 +691,17 @@ function renderItemsForm() {
     delBtn.textContent = '×';
     delBtn.addEventListener('click', function() { eliminarItem(item.id); });
 
+    var subDiv = document.createElement('div');
+    subDiv.className = 'item-subtotal';
+    subDiv.id = 'sub-' + item.id;
+    var subVal = (item.cantidad || 1) * (item.valor || 0);
+    subDiv.textContent = subVal > 0 ? formatPeso(subVal) : '';
+    if (subVal > 0) subDiv.classList.add('has-value');
+
     row.appendChild(swrap);
     row.appendChild(cantInp);
     row.appendChild(valInp);
+    row.appendChild(subDiv);
     row.appendChild(delBtn);
     c.appendChild(row);
   });
